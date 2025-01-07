@@ -10,6 +10,13 @@ export const GET = async (request: Request) => {
         const { searchParams } = new URL(request.url);
         const userId = searchParams.get('userId');
         const categoryId = searchParams.get('categoryId');
+        // initial variables for the search, filtering, and sorting
+        const searchKeywords = searchParams.get('keywords') as string;
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        // blogs pagination
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '10');
 
         if(!userId || !Types.ObjectId.isValid(userId)) {
             return new NextResponse(
@@ -52,7 +59,38 @@ export const GET = async (request: Request) => {
             category: new Types.ObjectId(categoryId),
         };
 
-        const blogs = await Blog.find(filter);
+        // search blogs api with keywords
+        if(searchKeywords) {
+            filter.$or = [
+                {
+                    title: {$regex: searchKeywords, $options: 'i'}
+                },
+                {
+                    description: {$regex: searchKeywords, $options: 'i'}
+                }
+            ];
+        }
+
+        // filter blogs with date
+        if(startDate && endDate) {
+            filter.createdAt = {
+                $gte: new Date(startDate),
+                $lte: new Date(endDate)
+            };
+        } else if(startDate) {
+            filter.createdAt = {
+                $gte: new Date(startDate),
+            };
+        } else if(endDate) {
+            filter.createdAt = {
+                $lte: new Date(endDate),
+            };
+        }
+        // formula how many blogs had to be skip. ex: 1-10, 11-20 etc.
+        const skip = (page - 1) * limit;
+
+        // response for search, filter, and sort
+        const blogs = await Blog.find(filter).sort({createdAt: 'asc'}).skip(skip).limit(limit);
         return new NextResponse(JSON.stringify(blogs), {status: 200});
     } catch (error: any) {
         return new NextResponse('error fetching blog' + error.message, {status:500});
